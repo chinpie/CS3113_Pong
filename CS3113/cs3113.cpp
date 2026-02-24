@@ -33,3 +33,31 @@ Color ColorFromHex(const char *hex)
     // Fallback – return white so you notice something went wrong
     return RAYWHITE;
 }
+
+/**
+ * @brief Calculates and returns the magnitude of a 2D vector.
+ *
+ * @param vector Any 2D raylib vector.
+ */
+float GetLength(const Vector2 *vector)
+{
+    return sqrtf(
+        pow(vector->x, 2) + pow(vector->y, 2));
+}
+
+/**
+ * @brief Mutates two dimensional vector to become its unit vector counterpart,
+ * also known as a direction vector, retains the original vector’s orientation
+ * but has a standardised length.
+ *
+ * @see https://hogonext.com/how-to-normalize-a-vector/
+ *
+ * @param vector Any 2D raylib vector.
+ */
+void Normalise(Vector2 *vector)
+{
+    float magnitude = GetLength(vector);
+
+    vector->x /= magnitude;
+    vector->y /= magnitude;
+}
