@@ -21,23 +21,41 @@
 
 // Enums
 
+enum BallDirection
+{
+    LEFT,
+    RIGHT,
+    UP,
+    DOWN,
+    NONE
+};
+
 AppStatus gAppStatus = RUNNING;
+BallDirection gBallXDirection = RIGHT;
+BallDirection gBallYDirection = NONE;
 
 // Global Constants
 
 constexpr int SCREEN_HEIGHT = 800,
               SCREEN_WIDTH = 1600,
               FPS = 60,
-              SIZE = 500 / 2,
-              PADDLESPEED = 200;
+              SIZE = 100,
+              PADDLESPEED = 1200,
+              BALLSPEED = 500,
+              BALLSIZE = 50;
 
 constexpr Vector2 ORIGIN = {SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2},
                   BASE_SIZE = {(float)SIZE, (float)SIZE},
-                  INIT_POS_P1 = {ORIGIN.x - 200.0f, ORIGIN.y},
-                  INIT_POS_P2 = {ORIGIN.x + 200.0f, ORIGIN.y};
+                  BASE_BALL_SIZE = {(float)BALLSIZE, (float)BALLSIZE},
+                  INIT_POS_P1 = {ORIGIN.x - 600.0f, ORIGIN.y},
+                  INIT_POS_P2 = {ORIGIN.x + 600.0f, ORIGIN.y},
+                  INIT_BALL_POSITION = {SCREEN_WIDTH / 2, 100},
+                  BG_SCALE = {float(SIZE) * 20, float(SIZE) * 10};
 
 constexpr char PADDLEONE_FP[] = "Assets/havel.png",
                PADDLETWO_FP[] = "Assets/Dark_Souls_Sif.png",
+               BALL_FP[] = "Assets/ball.png",
+               BG_FP[] = "Assets/background.png",
                BG_COLOUR[] = "#000000";
 
 // Global Variables
@@ -46,6 +64,11 @@ float gAngle = 0.0f,
 
 Vector2 gPaddleOnePosition = INIT_POS_P1,
         gPaddleOneMovement = {0.0f, 0.0f},
+        gBallOnePosition = INIT_BALL_POSITION,
+        gBallTwoPosition = INIT_BALL_POSITION,
+        gBallThreePosition = INIT_BALL_POSITION,
+        gBallOneMovement = {0.0f, 0.0f},
+        gBallOneScale = BASE_BALL_SIZE,
         gPaddleScale = BASE_SIZE,
         gPaddleTwoPosition = INIT_POS_P2,
         gPaddleTwoMovement = {0.0f, 0.0f},
@@ -55,6 +78,8 @@ Vector2 gPaddleOnePosition = INIT_POS_P1,
 
 Texture2D gPaddleOneTexture;
 Texture2D gPaddleTwoTexture;
+Texture2D gBallTexture;
+Texture2D gBackgroundTexture;
 
 unsigned int startTime;
 // Function Declarations
@@ -113,24 +138,83 @@ void initialise()
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Pong Clone");
     gPaddleOneTexture = LoadTexture(PADDLEONE_FP);
     gPaddleTwoTexture = LoadTexture(PADDLETWO_FP);
+    gBallTexture = LoadTexture(BALL_FP);
+    gBackgroundTexture = LoadTexture(BG_FP);
 }
 
 void processInput()
 {
-    if (WindowShouldClose())
+    gPaddleOneMovement = {0.0f, 0.0f};
+    gPaddleTwoMovement = {0.0f, 0.0f};
+
+    if (IsKeyDown(KEY_W))
+        gPaddleOneMovement.y = -1;
+    else if (IsKeyDown(KEY_S))
+        gPaddleOneMovement.y = 1;
+    if (IsKeyDown(KEY_UP))
+        gPaddleTwoMovement.y = -1;
+    else if (IsKeyDown(KEY_DOWN))
+        gPaddleTwoMovement.y = 1;
+
+    if (IsKeyPressed(KEY_Q) || WindowShouldClose())
         gAppStatus = TERMINATED;
 }
 
 void update()
 {
+    // Delta time calculations
+    float ticks = (float)GetTime();
+    float deltaTime = ticks - gPreviousTicks;
+    gPreviousTicks = ticks;
+
+    gPaddleOnePosition = {
+        gPaddleOnePosition.x,
+        gPaddleOnePosition.y + PADDLESPEED * gPaddleOneMovement.y * deltaTime};
+    gPaddleTwoPosition = {
+        gPaddleTwoPosition.x,
+        gPaddleTwoPosition.y + PADDLESPEED * gPaddleTwoMovement.y * deltaTime};
+    gBallOnePosition = {
+        gBallOnePosition.x + BALLSPEED * gBallOneMovement.x * deltaTime,
+        gBallOnePosition.y + BALLSPEED * gBallOneMovement.y * deltaTime};
+    // Collision Detection
+    if (gBallXDirection == RIGHT)
+    {
+        gBallOneMovement.x = 1;
+    }
+    else if (gBallXDirection == LEFT)
+    {
+        gBallOneMovement.x = -1;
+    }
+    if (gBallYDirection == UP)
+    {
+        gBallOneMovement.y = -1;
+    }
+    else if (gBallYDirection == DOWN)
+    {
+        gBallOneMovement.y = 1;
+    }
+    else
+    {
+        gBallOneMovement.y = 0;
+    }
+    if (isColliding(&gPaddleOnePosition, &gPaddleScale, &gBallOnePosition, &gBallOneScale))
+    {
+        gBallXDirection = RIGHT;
+    }
+    else if (isColliding(&gPaddleTwoPosition, &gPaddleScale, &gBallOnePosition, &gBallOneScale))
+    {
+        gBallXDirection = LEFT;
+    }
 }
 
 void render()
 {
     BeginDrawing();
     ClearBackground(ColorFromHex(BG_COLOUR));
+    renderObject(&gBackgroundTexture, &ORIGIN, &BG_SCALE);
     renderObject(&gPaddleOneTexture, &gPaddleOnePosition, &gPaddleScale);
     renderObject(&gPaddleTwoTexture, &gPaddleTwoPosition, &gPaddleScale);
+    renderObject(&gBallTexture, &gBallOnePosition, &gBallOneScale);
 
     EndDrawing();
 }
