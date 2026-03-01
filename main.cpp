@@ -72,11 +72,8 @@ constexpr char PADDLEONE_FP[] = "Assets/havel.png",
                BG_COLOUR[] = "#000000";
 
 // Global Variables
-float gMaxBallAngle = 90.0f,
-      gPreviousTicks = 0.0f,
-      gAngle = 0.0f,
-      gPreviousCollision = -100.0f,
-      gCollisionDelay = 0.005f;
+float gPreviousTicks = 0.0f,
+      gAngle = 0.0f;
 
 Vector2 gPaddleOnePosition = INIT_POS_P1,
         gPaddleOneMovement = {0.0f, 0.0f},
