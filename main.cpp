@@ -1,4 +1,5 @@
 #include <math.h>
+#include <string>
 #include "CS3113/cs3113.h"
 
 /**
@@ -21,18 +22,30 @@
 
 // Enums
 
-enum BallDirection
+AppStatus gAppStatus = RUNNING;
+enum GameMode
 {
-    LEFT,
-    RIGHT,
-    UP,
-    DOWN,
-    NONE
+    SINGLEPLAYER,
+    MULTIPLAYER
 };
 
-AppStatus gAppStatus = RUNNING;
-BallDirection gBallXDirection = RIGHT;
-BallDirection gBallYDirection = NONE;
+enum BallCount
+{
+    ONE,
+    TWO,
+    THREE,
+    FOUR
+};
+
+enum GameState
+{
+    PLAYING,
+    GAMEOVER
+};
+
+GameMode gGameMode = MULTIPLAYER;
+BallCount gBallCount = ONE;
+GameState gGameState = PLAYING;
 
 // Global Constants
 
@@ -42,7 +55,7 @@ constexpr int SCREEN_HEIGHT = 800,
               SIZE = 100,
               PADDLESPEED = 1200,
               BALLSPEED = 500,
-              BALLSIZE = 50;
+              BALLSIZE = 30;
 
 constexpr Vector2 ORIGIN = {SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2},
                   BASE_SIZE = {(float)SIZE, (float)SIZE},
@@ -50,7 +63,7 @@ constexpr Vector2 ORIGIN = {SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2},
                   INIT_POS_P1 = {ORIGIN.x - 600.0f, ORIGIN.y},
                   INIT_POS_P2 = {ORIGIN.x + 600.0f, ORIGIN.y},
                   INIT_BALL_POSITION = {SCREEN_WIDTH / 2, 100},
-                  BG_SCALE = {float(SIZE) * 20, float(SIZE) * 10};
+                  BG_SCALE = {float(SIZE) * 20, float(SIZE) * 8};
 
 constexpr char PADDLEONE_FP[] = "Assets/havel.png",
                PADDLETWO_FP[] = "Assets/Dark_Souls_Sif.png",
@@ -59,20 +72,33 @@ constexpr char PADDLEONE_FP[] = "Assets/havel.png",
                BG_COLOUR[] = "#000000";
 
 // Global Variables
-float gAngle = 0.0f,
-      gPreviousTicks = 0.0f;
+float gMaxBallAngle = 90.0f,
+      gPreviousTicks = 0.0f,
+      gAngle = 0.0f,
+      gPreviousCollision = -100.0f,
+      gCollisionDelay = 0.005f;
 
 Vector2 gPaddleOnePosition = INIT_POS_P1,
         gPaddleOneMovement = {0.0f, 0.0f},
         gBallOnePosition = INIT_BALL_POSITION,
-        gBallTwoPosition = INIT_BALL_POSITION,
-        gBallThreePosition = INIT_BALL_POSITION,
-        gBallOneMovement = {0.0f, 0.0f},
+        gBallTwoPosition = {INIT_BALL_POSITION.x - 100, INIT_BALL_POSITION.y + 300},
+        gBallThreePosition = {INIT_BALL_POSITION.x - 100, INIT_BALL_POSITION.y + 350},
+        gBallFourPosition = {INIT_BALL_POSITION.x - 100, INIT_BALL_POSITION.y + 500},
+        gBallOneMovement = {1.0f, 0.0f},
+        gBallTwoMovement = {1.0f, 0.0f},
+        gBallThreeMovement = {1.0f, 0.0f},
+        gBallFourMovement = {1.0f, 0.0f},
         gBallOneScale = BASE_BALL_SIZE,
         gPaddleScale = BASE_SIZE,
         gPaddleTwoPosition = INIT_POS_P2,
         gPaddleTwoMovement = {0.0f, 0.0f},
         gPaddleTwoScale = BASE_SIZE;
+
+int playerOnePoints = 0;
+int playerTwoPoints = 0;
+
+std::string playerOneScoreText = "" + std::to_string(playerOnePoints);
+std::string playerTwoScoreText = "" + std::to_string(playerTwoPoints);
 
 // Global Textures
 
@@ -102,6 +128,56 @@ bool isColliding(const Vector2 *positionA, const Vector2 *scaleA,
 
     return false;
 }
+
+void ballCollision(const Vector2 *ballPosition, const Vector2 *ballScale,
+                   const Vector2 *paddleOnePosition, const Vector2 *paddleTwoPosition, const Vector2 *paddleScale, Vector2 *ballMovement)
+{
+    if (isColliding(paddleOnePosition, paddleScale, ballPosition, ballScale))
+    {
+        ballMovement->x = 1;
+        // Check what part of the paddle it is hitting
+        if (ballPosition->y <= (paddleScale->y / 2 + paddleOnePosition->y))
+        {
+            ballMovement->y = -1;
+        }
+        else if (ballPosition->y > (paddleOnePosition->y - paddleScale->y / 2))
+        {
+            ballMovement->y = 1;
+        }
+    }
+    else if (isColliding(paddleTwoPosition, paddleScale, ballPosition, ballScale))
+    {
+        ballMovement->x = -1;
+        if (ballPosition->y < (paddleScale->y / 2 + paddleTwoPosition->y))
+        {
+            ballMovement->y = -1;
+        }
+        else if (ballPosition->y > (paddleTwoPosition->y - paddleScale->y))
+        {
+            ballMovement->y = 1;
+        }
+    }
+}
+
+void calculatePoints(const Vector2 *initialPos, Vector2 *ballposition, Vector2 *ballMovement, int &playerOnePoints, int &playerTwoPoints, std::string &playerOneText,
+                     std::string &playerTwoText)
+{
+    if (ballposition->x > 1600.0f)
+    {
+        playerOnePoints += 1;
+        playerOneText = "" + std::to_string(playerOnePoints);
+        *ballposition = *initialPos;
+        ballMovement->y = 0;
+    }
+    else if (ballposition->x < 0.0f)
+    {
+        playerTwoPoints += 1;
+        playerTwoText = "" + std::to_string(playerTwoPoints);
+        *ballposition = *initialPos;
+        ballMovement->y = 0;
+    }
+}
+
 void renderObject(const Texture2D *texture, const Vector2 *position,
                   const Vector2 *scale)
 {
@@ -145,15 +221,39 @@ void initialise()
 void processInput()
 {
     gPaddleOneMovement = {0.0f, 0.0f};
-    gPaddleTwoMovement = {0.0f, 0.0f};
+    if (gGameMode == MULTIPLAYER)
+    {
+        gPaddleTwoMovement = {0.0f, 0.0f};
+    }
 
+    if (IsKeyPressed(KEY_T))
+    {
+        gGameMode = SINGLEPLAYER;
+        gPaddleTwoMovement.y = 1;
+    }
+    if (IsKeyPressed(KEY_ONE))
+    {
+        gBallCount = ONE;
+    }
+    if (IsKeyPressed(KEY_TWO))
+    {
+        gBallCount = TWO;
+    }
+    if (IsKeyPressed(KEY_THREE))
+    {
+        gBallCount = THREE;
+    }
+    if (IsKeyPressed(KEY_FOUR))
+    {
+        gBallCount = FOUR;
+    }
     if (IsKeyDown(KEY_W))
         gPaddleOneMovement.y = -1;
     else if (IsKeyDown(KEY_S))
         gPaddleOneMovement.y = 1;
-    if (IsKeyDown(KEY_UP))
+    if (IsKeyDown(KEY_UP) && gGameMode == MULTIPLAYER)
         gPaddleTwoMovement.y = -1;
-    else if (IsKeyDown(KEY_DOWN))
+    else if (IsKeyDown(KEY_DOWN) && gGameMode == MULTIPLAYER)
         gPaddleTwoMovement.y = 1;
 
     if (IsKeyPressed(KEY_Q) || WindowShouldClose())
@@ -166,44 +266,105 @@ void update()
     float ticks = (float)GetTime();
     float deltaTime = ticks - gPreviousTicks;
     gPreviousTicks = ticks;
+    if (gGameState == PLAYING)
+    {
+        if ((gPaddleTwoPosition.y + gPaddleTwoScale.y / 2) >= SCREEN_HEIGHT)
+        {
+            gPaddleTwoMovement.y = -1;
+        }
+        if ((gPaddleTwoPosition.y - gPaddleTwoScale.y / 2) <= 0.0f)
+        {
+            gPaddleTwoMovement.y = 1;
+        }
+        if ((gPaddleOnePosition.y + gPaddleScale.y / 2) >= SCREEN_HEIGHT)
+        {
+            gPaddleOneMovement.y = -1;
+        }
+        if ((gPaddleOnePosition.y - gPaddleScale.y / 2) <= 0.0f)
+        {
+            gPaddleOneMovement.y = 1;
+        }
+        gPaddleOnePosition = {
+            gPaddleOnePosition.x,
+            gPaddleOnePosition.y + PADDLESPEED * gPaddleOneMovement.y * deltaTime};
+        gPaddleTwoPosition = {
+            gPaddleTwoPosition.x,
+            gPaddleTwoPosition.y + PADDLESPEED * gPaddleTwoMovement.y * deltaTime};
 
-    gPaddleOnePosition = {
-        gPaddleOnePosition.x,
-        gPaddleOnePosition.y + PADDLESPEED * gPaddleOneMovement.y * deltaTime};
-    gPaddleTwoPosition = {
-        gPaddleTwoPosition.x,
-        gPaddleTwoPosition.y + PADDLESPEED * gPaddleTwoMovement.y * deltaTime};
-    gBallOnePosition = {
-        gBallOnePosition.x + BALLSPEED * gBallOneMovement.x * deltaTime,
-        gBallOnePosition.y + BALLSPEED * gBallOneMovement.y * deltaTime};
-    // Collision Detection
-    if (gBallXDirection == RIGHT)
-    {
-        gBallOneMovement.x = 1;
-    }
-    else if (gBallXDirection == LEFT)
-    {
-        gBallOneMovement.x = -1;
-    }
-    if (gBallYDirection == UP)
-    {
-        gBallOneMovement.y = -1;
-    }
-    else if (gBallYDirection == DOWN)
-    {
-        gBallOneMovement.y = 1;
-    }
-    else
-    {
-        gBallOneMovement.y = 0;
-    }
-    if (isColliding(&gPaddleOnePosition, &gPaddleScale, &gBallOnePosition, &gBallOneScale))
-    {
-        gBallXDirection = RIGHT;
-    }
-    else if (isColliding(&gPaddleTwoPosition, &gPaddleScale, &gBallOnePosition, &gBallOneScale))
-    {
-        gBallXDirection = LEFT;
+        // Collision Detection
+
+        if (gBallOnePosition.y > 800)
+        {
+            gBallOneMovement.y = -1;
+        }
+        else if (gBallOnePosition.y < 0)
+        {
+            gBallOneMovement.y = 1;
+        }
+        if (gBallTwoPosition.y > 800)
+        {
+            gBallTwoMovement.y = -1;
+        }
+        else if (gBallTwoPosition.y < 0)
+        {
+            gBallTwoMovement.y = 1;
+        }
+        if (gBallThreePosition.y > 800)
+        {
+            gBallThreeMovement.y = -1;
+        }
+        else if (gBallThreePosition.y < 0)
+        {
+            gBallThreeMovement.y = 1;
+        }
+        if (gBallFourPosition.y > 800)
+        {
+            gBallFourMovement.y = -1;
+        }
+        else if (gBallFourPosition.y < 0)
+        {
+            gBallFourMovement.y = 1;
+        }
+
+        ballCollision(&gBallOnePosition, &gBallOneScale, &gPaddleOnePosition, &gPaddleTwoPosition, &gPaddleScale, &gBallOneMovement);
+        ballCollision(&gBallTwoPosition, &gBallOneScale, &gPaddleOnePosition, &gPaddleTwoPosition, &gPaddleScale, &gBallTwoMovement);
+        ballCollision(&gBallThreePosition, &gBallOneScale, &gPaddleOnePosition, &gPaddleTwoPosition, &gPaddleScale, &gBallThreeMovement);
+        ballCollision(&gBallFourPosition, &gBallOneScale, &gPaddleOnePosition, &gPaddleTwoPosition, &gPaddleScale, &gBallFourMovement);
+
+        gBallOnePosition = {
+            gBallOnePosition.x + BALLSPEED * gBallOneMovement.x * deltaTime,
+            gBallOnePosition.y + BALLSPEED * gBallOneMovement.y * deltaTime};
+        if (gBallCount == TWO || gBallCount == THREE || gBallCount == FOUR)
+        {
+            gBallTwoPosition = {
+                gBallTwoPosition.x + BALLSPEED * gBallTwoMovement.x * deltaTime,
+                gBallTwoPosition.y + BALLSPEED * gBallTwoMovement.y * deltaTime};
+        }
+        if (gBallCount == THREE || gBallCount == FOUR)
+        {
+            gBallThreePosition = {
+                gBallThreePosition.x + BALLSPEED * gBallThreeMovement.x * deltaTime,
+                gBallThreePosition.y + BALLSPEED * gBallThreeMovement.y * deltaTime};
+        }
+        if (gBallCount == FOUR)
+        {
+            gBallFourPosition = {
+                gBallFourPosition.x + BALLSPEED * gBallFourMovement.x * deltaTime,
+                gBallFourPosition.y + BALLSPEED * gBallFourMovement.y * deltaTime};
+        }
+
+        calculatePoints(&INIT_BALL_POSITION, &gBallOnePosition, &gBallOneMovement, playerOnePoints, playerTwoPoints, playerOneScoreText,
+                        playerTwoScoreText);
+        calculatePoints(&INIT_BALL_POSITION, &gBallTwoPosition, &gBallTwoMovement, playerOnePoints, playerTwoPoints, playerOneScoreText,
+                        playerTwoScoreText);
+        calculatePoints(&INIT_BALL_POSITION, &gBallThreePosition, &gBallThreeMovement, playerOnePoints, playerTwoPoints, playerOneScoreText,
+                        playerTwoScoreText);
+        calculatePoints(&INIT_BALL_POSITION, &gBallFourPosition, &gBallFourMovement, playerOnePoints, playerTwoPoints, playerOneScoreText,
+                        playerTwoScoreText);
+        if (playerOnePoints == 10 || playerTwoPoints == 10)
+        {
+            gGameState = GAMEOVER;
+        }
     }
 }
 
@@ -211,10 +372,61 @@ void render()
 {
     BeginDrawing();
     ClearBackground(ColorFromHex(BG_COLOUR));
-    renderObject(&gBackgroundTexture, &ORIGIN, &BG_SCALE);
-    renderObject(&gPaddleOneTexture, &gPaddleOnePosition, &gPaddleScale);
-    renderObject(&gPaddleTwoTexture, &gPaddleTwoPosition, &gPaddleScale);
-    renderObject(&gBallTexture, &gBallOnePosition, &gBallOneScale);
+    if (gGameState == PLAYING)
+    {
+        renderObject(&gBackgroundTexture, &ORIGIN, &BG_SCALE);
+        renderObject(&gPaddleOneTexture, &gPaddleOnePosition, &gPaddleScale);
+        renderObject(&gPaddleTwoTexture, &gPaddleTwoPosition, &gPaddleScale);
+        renderObject(&gBallTexture, &gBallOnePosition, &gBallOneScale);
+        if (gBallCount == TWO || gBallCount == THREE || gBallCount == FOUR)
+        {
+            renderObject(&gBallTexture, &gBallTwoPosition, &gBallOneScale);
+        }
+        if (gBallCount == THREE || gBallCount == FOUR)
+        {
+            renderObject(&gBallTexture, &gBallThreePosition, &gBallOneScale);
+        }
+        if (gBallCount == FOUR)
+        {
+            renderObject(&gBallTexture, &gBallFourPosition, &gBallOneScale);
+        }
+
+        // Player POINTS
+
+        DrawText(playerOneScoreText.c_str(), SCREEN_WIDTH / 2.0f - 625,
+                 50, 100, BLACK);
+        DrawText(playerTwoScoreText.c_str(), SCREEN_WIDTH / 2.0f + 550,
+                 50, 100, BLACK);
+
+        if (gGameMode == SINGLEPLAYER)
+        {
+            DrawText("Singleplayer Mode Active", SCREEN_WIDTH / 2.0f - 400,
+                     50, 50, RED);
+        }
+        else if (gGameMode == MULTIPLAYER)
+        {
+            DrawText("Multiplayer Mode Active", SCREEN_WIDTH / 2.0f - 400,
+                     50, 50, RED);
+        }
+    }
+    else if (gGameState == GAMEOVER)
+    {
+        if (playerOnePoints > playerTwoPoints)
+        {
+            DrawText("Player One is better at Dark souls!\n\t(P1 Won)", SCREEN_WIDTH / 2.0f - 400,
+                     50, 50, RED);
+        }
+        else if (playerOnePoints == playerTwoPoints)
+        {
+            DrawText("Aww Man there was a Tie!", SCREEN_WIDTH / 2.0f - 400,
+                     50, 50, RED);
+        }
+        else
+        {
+            DrawText("Player Two is better at Dark souls!\n\t(P2 Won)", SCREEN_WIDTH / 2.0f - 400,
+                     50, 50, RED);
+        }
+    }
 
     EndDrawing();
 }
@@ -223,6 +435,7 @@ void shutdown()
 {
     UnloadTexture(gPaddleOneTexture);
     UnloadTexture(gPaddleTwoTexture);
+    UnloadTexture(gBallTexture);
     CloseWindow();
 }
 int main(void)
